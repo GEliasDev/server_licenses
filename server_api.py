@@ -1,7 +1,7 @@
 """
 server_api.py  –  Servidor de licencias (Flask)
 ================================================
-Instalar: pip install flask flask-sqlalchemy
+Instalar: pip install flask flask-sqlalchemy gunicorn psycopg2-binary
 """
 
 import os
@@ -12,10 +12,18 @@ from flask import Flask, request, jsonify, render_template_string
 from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///licenses.db"
+
+# ── BASE DE DATOS ─────────────────────────────────────────────────────────────
+# Local  → SQLite automático
+# Railway → PostgreSQL via variable DATABASE_URL (inyectada automáticamente)
+_db_url = os.getenv("DATABASE_URL", "sqlite:///licenses.db")
+app.config["SQLALCHEMY_DATABASE_URI"] = _db_url.replace("postgres://", "postgresql://", 1)
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
 
+# ── CLAVE ADMIN ───────────────────────────────────────────────────────────────
+# Local  → usa el valor por defecto abajo
+# Railway → configura variable ADMIN_SECRET en el panel de Variables
 ADMIN_SECRET = os.getenv("ADMIN_SECRET", "TU_CLAVE_ADMIN_MUY_SEGURA")
 
 
@@ -125,7 +133,7 @@ def admin_create():
     db.session.commit()
 
     if not request.is_json:
-        secret     = request.args.get("secret", "")
+        secret      = request.args.get("secret", "")
         expires_str = lic.expires_at.isoformat() if lic.expires_at else "lifetime"
         return (
             f"<html><body style='background:#0e0f11;color:#d4d8e2;font-family:monospace;padding:32px'>"
@@ -135,8 +143,12 @@ def admin_create():
             f"<br><a href='/api/admin/panel?secret={secret}' style='color:#00e5a0'>← Volver al panel</a>"
             f"</body></html>"
         )
-    return jsonify({"key": key, "plan": plan, "user": user,
-                    "expires_at": lic.expires_at.isoformat() if lic.expires_at else "lifetime"}), 201
+    return jsonify({
+        "key":        key,
+        "plan":       plan,
+        "user":       user,
+        "expires_at": lic.expires_at.isoformat() if lic.expires_at else "lifetime",
+    }), 201
 
 
 @app.route("/api/admin/revoke", methods=["POST"])
@@ -170,9 +182,8 @@ def admin_reactivate():
 def admin_reset_device():
     """
     Desvincula el dispositivo y fuerza cierre del bot en ~60s.
-    Estrategia: revoca brevemente para que el cliente detecte REVOKED,
-    borre su caché y se cierre. Luego reactiva sin hw_id para que
-    pueda activarse de nuevo con su clave.
+    Revoca brevemente → cliente detecta REVOKED → borra caché → se cierra.
+    A los 65s reactiva sin hw_id → cliente activa con su clave de nuevo.
     """
     if not require_admin(request):
         return jsonify({"error": "UNAUTHORIZED"}), 401
@@ -181,12 +192,10 @@ def admin_reset_device():
     if not lic:
         return jsonify({"error": "No encontrada"}), 404
 
-    # 1) Revocar + limpiar hw_id → el bot detectará REVOKED en ≤60s y se cerrará
     lic.revoked = True
     lic.hw_id   = ""
     db.session.commit()
 
-    # 2) Reactivar en segundo plano tras 65s (cuando el bot ya se cerró)
     import threading
     def _reactivate():
         import time
@@ -223,11 +232,13 @@ def admin_list():
         return jsonify({"error": "UNAUTHORIZED"}), 401
     lics = License.query.order_by(License.created_at.desc()).all()
     return jsonify([{
-        "key": l.key, "plan": l.plan, "user": l.user,
-        "hw_id": l.hw_id or "sin activar",
-        "expires_at": l.expires_at.isoformat() if l.expires_at else "lifetime",
-        "revoked": l.revoked,
-        "last_seen": l.last_seen.isoformat() if l.last_seen else "nunca",
+        "key":         l.key,
+        "plan":        l.plan,
+        "user":        l.user,
+        "hw_id":       l.hw_id or "sin activar",
+        "expires_at":  l.expires_at.isoformat() if l.expires_at else "lifetime",
+        "revoked":     l.revoked,
+        "last_seen":   l.last_seen.isoformat() if l.last_seen else "nunca",
         "activations": l.activations,
     } for l in lics])
 
@@ -249,7 +260,6 @@ PANEL_HTML = """
     tr:nth-child(even){background:#16181c}
     .revoked{color:#e05252;font-weight:bold}
     .active{color:#00e5a0;font-weight:bold}
-    form.inline{display:inline;margin:0}
     .form-create{margin-bottom:24px;background:#16181c;padding:16px;border:1px solid #2a2d35}
     input,select{background:#0e0f11;color:#d4d8e2;border:1px solid #2a2d35;padding:6px;font-family:monospace}
     .btn{border:none;padding:5px 10px;font-weight:bold;cursor:pointer;font-family:monospace;font-size:12px}
@@ -304,21 +314,18 @@ PANEL_HTML = """
       </td>
       <td>
         {% if l.revoked %}
-          {# ── REACTIVAR ── #}
           <a href="/api/admin/reactivate_ui/{{ l.key }}?secret={{ secret }}"
              onclick="return confirm('¿Reactivar esta licencia?')">
             <button class="btn btn-reactivate">Reactivar</button>
           </a>
         {% else %}
-          {# ── REVOCAR ── #}
           <a href="/api/admin/revoke_ui/{{ l.key }}?secret={{ secret }}"
              onclick="return confirm('¿Revocar? El cliente perderá acceso en ~60 segundos.')">
             <button class="btn btn-revoke">Revocar</button>
           </a>
           &nbsp;
-          {# ── RESET PC ── #}
           <a href="/api/admin/reset_ui/{{ l.key }}?secret={{ secret }}"
-             onclick="return confirm('¿Desvincular dispositivo? El cliente deberá ingresar su clave de nuevo.')">
+             onclick="return confirm('¿Desvincular dispositivo? El cliente deberá ingresar su clave de nuevo en ~60s.')">
             <button class="btn btn-reset">Reset PC</button>
           </a>
         {% endif %}
@@ -340,24 +347,22 @@ def admin_panel():
         return "Unauthorized", 401
     lics   = License.query.order_by(License.created_at.desc()).all()
     secret = request.args.get("secret", "")
-
-    # Serializar para el template
-    data = []
+    data   = []
     for l in lics:
         data.append({
-            "key":        l.key,
-            "plan":       l.plan,
-            "user":       l.user,
-            "hw_id":      l.hw_id or "",
-            "expires_at": l.expires_at.isoformat() if l.expires_at else "lifetime",
-            "revoked":    l.revoked,
-            "last_seen":  l.last_seen.isoformat() if l.last_seen else "nunca",
+            "key":         l.key,
+            "plan":        l.plan,
+            "user":        l.user,
+            "hw_id":       l.hw_id or "",
+            "expires_at":  l.expires_at.isoformat() if l.expires_at else "lifetime",
+            "revoked":     l.revoked,
+            "last_seen":   l.last_seen.isoformat() if l.last_seen else "nunca",
             "activations": l.activations,
         })
     return render_template_string(PANEL_HTML, licenses=data, secret=secret)
 
 
-# ── ACCIONES UI (redirigen al panel tras ejecutar) ────────────────────────────
+# ── ACCIONES UI ───────────────────────────────────────────────────────────────
 
 @app.route("/api/admin/revoke_ui/<key>")
 def revoke_ui(key):
@@ -387,11 +392,9 @@ def reset_ui(key):
         return "Unauthorized", 401
     lic = License.query.filter_by(key=key.upper()).first()
     if lic:
-        # Revocar + limpiar hw_id → bot detecta REVOKED en ≤60s y se cierra
         lic.revoked = True
         lic.hw_id   = ""
         db.session.commit()
-        # Reactivar tras 65s (bot ya cerrado, licencia lista para nueva activación)
         import threading
         def _reactivate(k=key.upper()):
             import time
