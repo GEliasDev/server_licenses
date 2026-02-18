@@ -1,7 +1,7 @@
 """
 server_api.py  –  Servidor de licencias (Flask)
 ================================================
-Instalar: pip install flask flask-sqlalchemy gunicorn psycopg2-binary
+Instalar: pip install flask flask-sqlalchemy gunicorn
 """
 
 import os
@@ -14,20 +14,9 @@ from flask_sqlalchemy import SQLAlchemy
 app = Flask(__name__)
 
 # ── BASE DE DATOS ─────────────────────────────────────────────────────────────
-# Local  → SQLite automático
-# Railway → PostgreSQL via variable DATABASE_URL (inyectada automáticamente)
-def _build_db_url():
-    url = os.getenv("DATABASE_URL", "")
-    if not url:
-        return "sqlite:///licenses.db"
-    # Normalizar prefijo para SQLAlchemy
-    url = url.replace("postgres://", "postgresql://", 1)
-    # Python 3.13 + psycopg3 requiere postgresql+psycopg://
-    if url.startswith("postgresql://") and "+psycopg" not in url:
-        url = url.replace("postgresql://", "postgresql+psycopg://", 1)
-    return url
-
-app.config["SQLALCHEMY_DATABASE_URI"] = _build_db_url()
+# Usa SQLite — simple, sin dependencias externas, perfecto para comenzar.
+# El archivo licenses.db se crea automáticamente en el servidor.
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///licenses.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
 
