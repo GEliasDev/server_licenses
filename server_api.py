@@ -409,9 +409,10 @@ def reset_ui(key):
 
 # ── INICIO ────────────────────────────────────────────────────────────────────
 
+with app.app_context():
+    db.create_all()
+
 if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()
-        print("✓ Base de datos lista")
-        print(f"✓ Panel: http://localhost:5000/api/admin/panel?secret={ADMIN_SECRET}")
+    print(f"✓ Panel: http://localhost:5000/api/admin/panel?secret={ADMIN_SECRET}")
     app.run(host="0.0.0.0", port=5000, debug=False)
+
