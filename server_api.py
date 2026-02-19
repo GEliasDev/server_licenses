@@ -16,7 +16,7 @@ app = Flask(__name__)
 # ── BASE DE DATOS ─────────────────────────────────────────────────────────────
 # Usa SQLite — simple, sin dependencias externas, perfecto para comenzar.
 # El archivo licenses.db se crea automáticamente en el servidor.
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///licenses.db"
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
 
@@ -410,9 +410,13 @@ def reset_ui(key):
 # ── INICIO ────────────────────────────────────────────────────────────────────
 
 with app.app_context():
+    from urllib.parse import urlparse
+    if app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgres://"):
+    app.config["SQLALCHEMY_DATABASE_URI"] = app.config["SQLALCHEMY_DATABASE_URI"].replace("postgres://", "postgresql://", 1)
     db.create_all()
 
 if __name__ == "__main__":
     print(f"✓ Panel: http://localhost:5000/api/admin/panel?secret={ADMIN_SECRET}")
     app.run(host="0.0.0.0", port=5000, debug=False)
+
 
