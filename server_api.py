@@ -19,8 +19,9 @@ app = Flask(__name__)
 # El archivo licenses.db se crea automáticamente en el servidor.
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-db = SQLAlchemy(app)
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'poolclass': NullPool}
+
+db = SQLAlchemy(app)
 
 # ── CLAVE ADMIN ───────────────────────────────────────────────────────────────
 # Local  → usa el valor por defecto abajo
@@ -417,6 +418,7 @@ with app.app_context():
 if __name__ == "__main__":
     print(f"✓ Panel: http://localhost:5000/api/admin/panel?secret={ADMIN_SECRET}")
     app.run(host="0.0.0.0", port=5000, debug=False)
+
 
 
 
