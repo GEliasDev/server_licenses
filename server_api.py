@@ -406,17 +406,15 @@ def reset_ui(key):
         threading.Thread(target=_reactivate, daemon=True).start()
     return _redirect_panel(request.args.get("secret", ""))
 
-
 # ── INICIO ────────────────────────────────────────────────────────────────────
-
 with app.app_context():
-    from urllib.parse import urlparse
-    if app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgres://"):
-    app.config["SQLALCHEMY_DATABASE_URI"] = app.config["SQLALCHEMY_DATABASE_URI"].replace("postgres://", "postgresql://", 1)
+    if app.config["SQLALCHEMY_DATABASE_URI"] and app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgres://"):
+        app.config["SQLALCHEMY_DATABASE_URI"] = app.config["SQLALCHEMY_DATABASE_URI"].replace("postgres://", "postgresql://", 1)
     db.create_all()
 
 if __name__ == "__main__":
     print(f"✓ Panel: http://localhost:5000/api/admin/panel?secret={ADMIN_SECRET}")
     app.run(host="0.0.0.0", port=5000, debug=False)
+
 
 
