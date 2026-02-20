@@ -166,3 +166,63 @@ def list_licenses():
         "device_info":      l.device_info,
         "ip_address":       l.ip_address,
     } for l in lics])
+
+
+@bp.route("/api/admin/edit_license", methods=["POST"])
+def edit_license():
+    """Edita los datos de una licencia existente"""
+    if not require_admin(request):
+        return jsonify({"error": "UNAUTHORIZED"}), 401
+    
+    data = request.get_json(force=True)
+    key = (data.get("key") or "").upper()
+    user = data.get("user", "")
+    plan = data.get("plan", "")
+    
+    if plan not in ("monthly", "yearly", "lifetime"):
+        return jsonify({"error": "Plan inválido"}), 400
+    
+    lic = License.query.filter_by(key=key).first()
+    if not lic:
+        return jsonify({"error": "No encontrada"}), 404
+    
+    # Actualizar datos
+    lic.user = user
+    
+    # Si cambió el plan, recalcular expiración
+    if lic.plan != plan:
+        old_plan = lic.plan
+        lic.plan = plan
+        
+        # Solo recalcular si no está expirada
+        if not lic.expires_at or lic.expires_at > datetime.utcnow():
+            lic.expires_at = make_expiry(plan)
+    
+    db.session.commit()
+    
+    return jsonify({
+        "updated": key,
+        "user": user,
+        "plan": plan,
+        "expires_at": lic.expires_at.isoformat() if lic.expires_at else "lifetime"
+    }), 200
+
+
+@bp.route("/api/admin/delete_license", methods=["POST"])
+def delete_license():
+    """Elimina permanentemente una licencia y todos sus datos relacionados"""
+    if not require_admin(request):
+        return jsonify({"error": "UNAUTHORIZED"}), 401
+    
+    key = (request.get_json(force=True).get("key") or "").upper()
+    
+    lic = License.query.filter_by(key=key).first()
+    if not lic:
+        return jsonify({"error": "No encontrada"}), 404
+    
+    # SQLAlchemy eliminará automáticamente los registros relacionados
+    # gracias al cascade='all, delete-orphan' en los modelos
+    db.session.delete(lic)
+    db.session.commit()
+    
+    return jsonify({"deleted": key}), 200

@@ -17,7 +17,6 @@ class Config:
     # Configuración de licencias
     LICENSE_PREFIX = "VB"
     
-    # Ajuste automático para Heroku/Railway
     @staticmethod
     def init_app(app):
         """Inicialización de la aplicación"""
