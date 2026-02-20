@@ -67,6 +67,7 @@ def revoke():
         return jsonify({"error": "No encontrada"}), 404
     
     lic.revoked = True
+    lic.hw_id = ""          # ← limpia el dispositivo al revocar
     db.session.commit()
     
     return jsonify({"revoked": key}), 200

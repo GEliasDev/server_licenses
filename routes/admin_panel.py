@@ -6,7 +6,7 @@ from datetime import datetime
 from flask import Blueprint, request, render_template_string
 from models import db, License
 from utils import require_admin, redirect_panel
-from templates.panel import PANEL_HTML
+from templates._panel import PANEL_HTML
 
 bp = Blueprint('admin_panel', __name__)
 
