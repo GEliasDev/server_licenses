@@ -5,7 +5,7 @@ routes/validation.py - Endpoints de validación de licencias (API pública)
 from datetime import datetime
 from flask import Blueprint, request, jsonify
 from models import db, License, DeviceHistory
-from utils import log_activity, get_device_info
+from utils import log_activity, get_device_info, get_client_ip
 
 bp = Blueprint('validation', __name__)
 
@@ -17,7 +17,7 @@ def validate():
     key         = (data.get("key") or "").strip().upper()
     hw_id       = (data.get("hw_id") or "").strip()
     app_version = data.get("app_version", "")
-    ip          = request.headers.get('X-Forwarded-For', request.remote_addr)
+    ip          = get_client_ip(request)  # Usar función mejorada
 
     if not key or not hw_id:
         return jsonify({"error": "INVALID"}), 403

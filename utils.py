@@ -39,10 +39,42 @@ def get_device_info(user_agent_string: str) -> str:
         return user_agent_string[:100] if user_agent_string else "Desconocido"
 
 
+def get_client_ip(request) -> str:
+    """
+    Extrae la IP real del cliente, manejando proxies y CDNs.
+    
+    Orden de prioridad:
+    1. CF-Connecting-IP (Cloudflare)
+    2. X-Real-IP (Nginx)
+    3. X-Forwarded-For (primer IP en la cadena)
+    4. request.remote_addr (fallback)
+    """
+    # Cloudflare pone la IP real del cliente aquí
+    if request.headers.get('CF-Connecting-IP'):
+        return request.headers.get('CF-Connecting-IP')
+    
+    # Nginx y otros proxies
+    if request.headers.get('X-Real-IP'):
+        return request.headers.get('X-Real-IP')
+    
+    # X-Forwarded-For puede tener múltiples IPs: "client, proxy1, proxy2"
+    # Tomamos solo la primera (la del cliente real)
+    if request.headers.get('X-Forwarded-For'):
+        ips = request.headers.get('X-Forwarded-For').split(',')
+        return ips[0].strip()
+    
+    # Fallback
+    return request.remote_addr or "Unknown"
+
+
 def log_activity(license_obj, hw_id, ip, status, error_detail="", app_version=""):
     """Registra cada intento de validación"""
     user_agent = request.headers.get('User-Agent', '')
     device_info = get_device_info(user_agent)
+    
+    # Asegurar que tengamos solo la IP real del cliente
+    if ip and ',' in ip:
+        ip = ip.split(',')[0].strip()
     
     # Crear log de actividad
     log = ActivityLog(
