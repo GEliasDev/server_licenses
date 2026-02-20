@@ -68,17 +68,19 @@ MODAL_AND_SCRIPTS = """
     document.getElementById('detailsContent').innerHTML = 'Cargando detalles...';
 
     fetch(`/api/admin/license_details/${key}?secret=${secret}`)
-      .then(r => r.json())
-      .then(data => {
+        .then(r => r.json())
+        .then(data => {
         const lic = data.license;
+        const hasDeviceFresh = !!lic.current_hw_id;  // ← dato fresco de la API
+
         document.getElementById('detailsContent').innerHTML =
-          buildActionBar(key, secret, isRevoked, hasDevice) +
-          buildEditForm(key, lic) +
-          buildInfo(lic) +
-          buildStats(data.statistics) +
-          buildDevices(data.devices) +
-          buildActivity(data.recent_activity);
-      })
+            buildActionBar(key, secret, isRevoked, hasDeviceFresh) +  // ← usa este
+            buildEditForm(key, lic) +
+            buildInfo(lic) +
+            buildStats(data.statistics) +
+            buildDevices(data.devices) +
+            buildActivity(data.recent_activity);
+        })
       .catch(() => {
         document.getElementById('detailsContent').innerHTML =
           '<p style="color:#e05252">Error al cargar detalles</p>';
